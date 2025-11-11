@@ -1,0 +1,24 @@
+# Example: How to use the docker-builder action in your project
+
+name: Build & Push Docker Image
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
+  schedule:
+    - cron: '0 12 * * 0'  # Weekly build every Sunday at 12:00 UTC
+
+jobs:
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build and Push Docker Image
+        uses: cfindlayisme/docker-builder@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}

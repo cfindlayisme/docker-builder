@@ -1,0 +1,106 @@
+name: 'Docker Builder & Pusher'
+description: 'Build and push Docker images to GitHub Container Registry with multi-platform support'
+author: 'cfindlayisme'
+
+inputs:
+  github-token:
+    description: 'GitHub token for container registry'
+    required: true
+  
+  repository:
+    description: 'GitHub repository (owner/name)'
+    required: true
+  
+  ref:
+    description: 'Git reference being built'
+    required: true
+  
+  docker-platforms:
+    description: 'Docker platforms to build for'
+    required: false
+    default: 'linux/amd64,linux/arm64'
+  
+  dockerfile-path:
+    description: 'Path to Dockerfile'
+    required: false
+    default: './Dockerfile'
+  
+  docker-context:
+    description: 'Docker build context'
+    required: false
+    default: '.'
+  
+  push-latest:
+    description: 'Push :latest tag (only on main branch)'
+    required: false
+    default: 'true'
+  
+  additional-tags:
+    description: 'Additional tags to push (comma-separated, e.g., "v1.0.0,stable")'
+    required: false
+    default: ''
+
+outputs:
+  image-tags:
+    description: 'Docker image tags that were built/pushed'
+    value: ${{ steps.meta.outputs.tags }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Login to GitHub Container Registry
+      if: inputs.ref == 'refs/heads/main'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.github-token }}
+    
+    - name: Prepare tags
+      id: meta
+      shell: bash
+      run: |
+        TAGS="ghcr.io/${{ inputs.repository }}:${GITHUB_SHA::7}"
+        
+        # Add latest tag if on main branch and enabled
+        if [[ "${{ inputs.ref }}" == "refs/heads/main" && "${{ inputs.push-latest }}" == "true" ]]; then
+          TAGS="$TAGS,ghcr.io/${{ inputs.repository }}:latest"
+        fi
+        
+        # Add additional tags if provided
+        if [[ -n "${{ inputs.additional-tags }}" ]]; then
+          IFS=',' read -ra ADDITIONAL <<< "${{ inputs.additional-tags }}"
+          for tag in "${ADDITIONAL[@]}"; do
+            TAGS="$TAGS,ghcr.io/${{ inputs.repository }}:$tag"
+          done
+        fi
+        
+        echo "tags=$TAGS" >> $GITHUB_OUTPUT
+        echo "Building tags: $TAGS"
+    
+    - name: Build Docker image (validation only)
+      if: inputs.ref != 'refs/heads/main'
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ inputs.docker-context }}
+        file: ${{ inputs.dockerfile-path }}
+        platforms: ${{ inputs.docker-platforms }}
+        push: false
+        tags: ${{ steps.meta.outputs.tags }}
+    
+    - name: Build and push Docker image
+      if: inputs.ref == 'refs/heads/main'
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ inputs.docker-context }}
+        file: ${{ inputs.dockerfile-path }}
+        platforms: ${{ inputs.docker-platforms }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+
+branding:
+  icon: 'package'
+  color: 'blue'

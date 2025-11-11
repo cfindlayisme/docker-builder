@@ -11,7 +11,8 @@ on:
     - cron: '0 12 * * 0'  # Weekly build every Sunday at 12:00 UTC
 
 jobs:
-  docker-build:
+  # Example 1: Simple Docker build without Kubernetes deployment
+  docker-build-simple:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,3 +23,24 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           ref: ${{ github.ref }}
+  
+  # Example 2: Docker build with Kubernetes deployment
+  docker-build-with-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build, Push and Deploy
+        uses: cfindlayisme/docker-builder@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
+          deploy-enabled: 'true'
+          vault-addr: ${{ secrets.VAULT_ADDR }}
+          vault-role-id: ${{ secrets.VAULT_ROLE_ID }}
+          vault-secret-id: ${{ secrets.VAULT_SECRET_ID }}
+          deployment-name: 'my-app'
+          staging-enabled: 'true'
+          production-enabled: 'true'
+

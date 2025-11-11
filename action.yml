@@ -39,11 +39,65 @@ inputs:
     description: 'Additional tags to push (comma-separated, e.g., "v1.0.0,stable")'
     required: false
     default: ''
+  
+  deploy-enabled:
+    description: 'Enable Kubernetes deployment'
+    required: false
+    default: 'false'
+  
+  vault-addr:
+    description: 'Vault server address (required if deploy-enabled is true)'
+    required: false
+    default: ''
+  
+  vault-role-id:
+    description: 'Vault AppRole role ID (required if deploy-enabled is true)'
+    required: false
+    default: ''
+  
+  vault-secret-id:
+    description: 'Vault AppRole secret ID (required if deploy-enabled is true)'
+    required: false
+    default: ''
+  
+  vault-kubeconfig-path:
+    description: 'Vault path to kubeconfig secret'
+    required: false
+    default: 'kv/data/pipeline/k3s'
+  
+  staging-enabled:
+    description: 'Enable staging deployment'
+    required: false
+    default: 'true'
+  
+  production-enabled:
+    description: 'Enable production deployment'
+    required: false
+    default: 'true'
+  
+  staging-namespace:
+    description: 'Kubernetes namespace for staging'
+    required: false
+    default: 'staging'
+  
+  production-namespace:
+    description: 'Kubernetes namespace for production'
+    required: false
+    default: 'production'
+  
+  deployment-name:
+    description: 'Kubernetes deployment name (required if deploy-enabled is true)'
+    required: false
+    default: ''
 
 outputs:
   image-tags:
     description: 'Docker image tags that were built/pushed'
     value: ${{ steps.meta.outputs.tags }}
+  
+  deploy-result:
+    description: 'Deployment result (only if deploy-enabled is true)'
+    value: ${{ steps.deploy.outcome }}
 
 runs:
   using: 'composite'
@@ -100,6 +154,40 @@ runs:
         platforms: ${{ inputs.docker-platforms }}
         push: true
         tags: ${{ steps.meta.outputs.tags }}
+    
+    # Kubernetes Deployment (optional)
+    - name: Retrieve kubeconfig from Vault
+      id: import-secrets
+      if: inputs.deploy-enabled == 'true'
+      uses: hashicorp/vault-action@v3.3.0
+      with:
+        url: ${{ inputs.vault-addr }}
+        method: approle
+        roleId: ${{ inputs.vault-role-id }}
+        secretId: ${{ inputs.vault-secret-id }}
+        secrets: ${{ inputs.vault-kubeconfig-path }} kubeconfig
+        exportEnv: true
+    
+    - name: Save kubeconfig to file
+      if: inputs.deploy-enabled == 'true'
+      run: |
+        mkdir -p $HOME/.kube
+        echo '${{ steps.import-secrets.outputs.kubeconfig }}' > $HOME/.kube/config
+        echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+      shell: bash
+    
+    - name: Restart staging deployment
+      id: deploy
+      if: inputs.deploy-enabled == 'true' && inputs.staging-enabled == 'true'
+      run: |
+        kubectl -n ${{ inputs.staging-namespace }} rollout restart deployment ${{ inputs.deployment-name }}
+      shell: bash
+    
+    - name: Restart production deployment
+      if: inputs.deploy-enabled == 'true' && inputs.production-enabled == 'true' && inputs.ref == 'refs/heads/main'
+      run: |
+        kubectl -n ${{ inputs.production-namespace }} rollout restart deployment ${{ inputs.deployment-name }}
+      shell: bash
 
 branding:
   icon: 'package'

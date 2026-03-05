@@ -137,7 +137,7 @@ runs:
     
     - name: Build Docker image (validation only)
       if: inputs.ref != 'refs/heads/main'
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: ${{ inputs.docker-context }}
         file: ${{ inputs.dockerfile-path }}
@@ -147,7 +147,7 @@ runs:
     
     - name: Build and push Docker image
       if: inputs.ref == 'refs/heads/main'
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: ${{ inputs.docker-context }}
         file: ${{ inputs.dockerfile-path }}
